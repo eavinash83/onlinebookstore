@@ -127,7 +127,7 @@ async function deploy() {
   await smoke(url);
 }
 
-// ---------- smoke checks (read-only: no accounts or bookings are created in the production database) ----------
+// ---------- smoke checks (read-only: no accounts or orders are created in the production database) ----------
 async function smoke(url) {
   const check = async (name, fn) => {
     try {
@@ -162,15 +162,15 @@ async function smoke(url) {
     expect(res.status === 200 && (await res.text()).includes('<div id="root">'), `status ${res.status}`);
   });
   await check('SPA deep link falls back to index.html', async () => {
-    const res = await fetch(`${url}/bookings`, { headers: { Accept: 'text/html' } });
+    const res = await fetch(`${url}/orders`, { headers: { Accept: 'text/html' } });
     expect(res.status === 200, `status ${res.status}`);
   });
   await check('GET /api/auth/ok (Better Auth mounted)', async () => {
     const res = await fetch(`${url}/api/auth/ok`);
     expect(res.status === 200, `status ${res.status}`);
   });
-  await check('anonymous GET /api/bookings is 401', async () => {
-    const res = await fetch(`${url}/api/bookings`);
+  await check('anonymous GET /api/orders is 401', async () => {
+    const res = await fetch(`${url}/api/orders`);
     expect(res.status === 401, `status ${res.status}`);
   });
   await check('unknown /api path is a JSON 404', async () => {
