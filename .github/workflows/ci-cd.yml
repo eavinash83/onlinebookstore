@@ -1,0 +1,67 @@
+# CI on every push and pull request; on pushes to main (and manual runs) it then deploys to Render and smoke-tests the result.
+#
+# One-time setup (Settings > Secrets and variables > Actions > New repository secret):
+#   RENDER_API_KEY      Render > Account Settings > API Keys
+#   RENDER_SERVICE_ID   srv-... (printed by `npm run render:create`, or in the service URL in the Render dashboard)
+# Then switch Render's own push-to-deploy off so deploys happen only here, after CI is green:
+#   npm run render:autodeploy -- off
+name: CI/CD
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: 'Deploy this commit SHA instead of the branch head (roll back / pin). Leave empty for HEAD.'
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-cd-${{ github.ref }}
+  cancel-in-progress: false # never cancel a deploy half-way
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Syntax check server and shared code
+        run: |
+          for f in server/*.js shared/*.js scripts/*.mjs; do node --check "$f"; done
+      - run: npm run build
+      - name: Docker image builds
+        run: docker build -t app-ci .
+
+  deploy:
+    needs: verify
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production # add required reviewers on this environment if you want a manual approval gate
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
+      COMMIT_ID: ${{ github.event.inputs.commit }}
+    steps:
+      - name: Check secrets
+        run: |
+          if [ -z "$RENDER_API_KEY" ] || [ -z "$RENDER_SERVICE_ID" ]; then
+            echo "::error::Add RENDER_API_KEY and RENDER_SERVICE_ID as repository secrets (see the header of this file)."
+            exit 1
+          fi
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Deploy to Render and smoke-test
+        run: node scripts/render.mjs deploy

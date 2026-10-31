@@ -1,0 +1,19 @@
+# Render Blueprint: one Docker web service. Data lives in Neon, so there is no Render database.
+# Create it from the Render dashboard: New > Blueprint > pick this repo. Render asks for DATABASE_URL (sync: false)
+# and generates BETTER_AUTH_SECRET itself. Reference: https://render.com/docs/blueprint-spec
+services:
+  - type: web
+    name: bookstore
+    runtime: docker
+    plan: free # free web services sleep after 15 min idle (about 1 min cold start); use a paid plan for always-on
+    region: oregon # keep it near the Neon project's region to cut query latency
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health
+    autoDeployTrigger: off # GitHub Actions (.github/workflows/ci-cd.yml) deploys after CI passes; use `commit` if you do not use it
+    envVars:
+      - key: DATABASE_URL
+        sync: false # paste the Neon connection string in the dashboard when prompted; never commit it
+      - key: BETTER_AUTH_SECRET
+        generateValue: true # random 256-bit value, stable across deploys
+      # BETTER_AUTH_URL is not set: the app falls back to RENDER_EXTERNAL_URL (https://<name>.onrender.com).
+      # Add BETTER_AUTH_URL here or in the dashboard once a custom domain is attached.
